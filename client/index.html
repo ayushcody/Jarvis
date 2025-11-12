@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LiveKit × Sarvam × RAG</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap');
+    :root{
+      color-scheme: dark;
+      --bg:#030303;
+      --grid:#0c0c0c;
+      --text:#f5f7ff;
+      --muted:#a6b1c4;
+      --accent:#38f8c8;
+      --accent-respond:#ff9645;
+      --card:#0b0f18eb;
+    }
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:'Space Grotesk',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:80px 18px 32px;
+      transition:background 0.6s ease;
+    }
+    body::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      background-image:
+        radial-gradient(circle at 20% 20%,rgba(56,248,200,0.1),transparent 40%),
+        radial-gradient(circle at 80% 30%,rgba(255,150,69,0.12),transparent 45%),
+        repeating-linear-gradient(0deg,var(--grid) 0, var(--grid) 1px, transparent 1px, transparent 80px),
+        repeating-linear-gradient(90deg,var(--grid) 0, var(--grid) 1px, transparent 1px, transparent 80px);
+      z-index:-2;
+    }
+    body[data-mode="listening"]{
+      --accent:#2fff9d;
+      background:#020302;
+    }
+    body[data-mode="responding"]{
+      --accent:var(--accent-respond);
+      background:#050100;
+    }
+    .jarvis-banner{
+      position:fixed;
+      top:24px;
+      left:50%;
+      transform:translateX(-50%);
+      text-align:center;
+      letter-spacing:0.4em;
+      text-transform:uppercase;
+      font-size:clamp(26px,4vw,40px);
+      color:var(--text);
+      pointer-events:none;
+    }
+    .jarvis-banner span{
+      display:block;
+      font-weight:600;
+      filter:drop-shadow(0 0 12px rgba(56,248,200,0.55));
+    }
+    .jarvis-banner small{
+      display:block;
+      font-size:12px;
+      letter-spacing:0.6em;
+      color:var(--muted);
+      margin-top:6px;
+    }
+    .glass-shell{
+      width:min(1200px,100%);
+      border-radius:24px;
+      padding:32px;
+      background:var(--card);
+      box-shadow:0 25px 45px rgba(0,0,0,0.55);
+      border:1px solid rgba(255,255,255,0.06);
+      backdrop-filter:blur(30px);
+      display:grid;
+      grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+      gap:32px;
+    }
+    @media(max-width:980px){
+      .glass-shell{
+        grid-template-columns:1fr;
+        padding:24px;
+      }
+    }
+    .panel{
+      background:rgba(255,255,255,0.02);
+      border-radius:20px;
+      padding:24px;
+      border:1px solid rgba(255,255,255,0.04);
+    }
+    h1{
+      font-size:clamp(28px,4vw,42px);
+      margin:0 0 6px;
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+    }
+    .subtitle{
+      color:var(--muted);
+      margin:0 0 24px;
+      letter-spacing:0.1em;
+      text-transform:uppercase;
+      font-size:13px;
+    }
+    .inputs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:16px;
+      margin-bottom:18px;
+    }
+    label{
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+      color:var(--muted);
+      display:block;
+      margin-bottom:6px;
+    }
+    input{
+      width:100%;
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.12);
+      background:#02060e;
+      color:var(--text);
+      font-size:16px;
+      transition:border 0.2s ease, box-shadow 0.2s ease;
+    }
+    input:focus{
+      outline:none;
+      border-color:var(--accent);
+      box-shadow:0 0 0 1px var(--accent);
+    }
+    button{
+      border:none;
+      border-radius:14px;
+      padding:14px 18px;
+      font-size:16px;
+      font-weight:600;
+      cursor:pointer;
+      color:#050505;
+      background:var(--accent);
+      box-shadow:0 15px 35px rgba(56,248,200,0.3);
+      transition:transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+    button:hover:enabled{ transform:translateY(-2px); }
+    button:disabled{ opacity:0.45; cursor:not-allowed; }
+    .tag-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+    .tag{
+      padding:6px 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.1);
+      font-size:12px;
+      letter-spacing:0.08em;
+      text-transform:uppercase;
+      color:var(--muted);
+    }
+    .jarvis-status{
+      margin-top:26px;
+      display:flex;
+      align-items:flex-start;
+      gap:18px;
+      padding:18px;
+      border-radius:16px;
+      background:rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+    .status-dot{
+      width:16px;
+      height:16px;
+      border-radius:50%;
+      background:var(--accent);
+      box-shadow:0 0 12px var(--accent);
+      flex-shrink:0;
+      margin-top:6px;
+    }
+    .status-primary{ font-size:22px; letter-spacing:0.08em; text-transform:uppercase; }
+    .status-secondary{ color:var(--muted); font-size:14px; letter-spacing:0.04em; margin-top:4px; }
+    .connection-badge{
+      margin-left:auto;
+      padding:8px 14px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.12);
+      font-size:12px;
+      letter-spacing:0.2em;
+    }
+    .connection-badge[data-state="connected"]{ color:#0be6b7; border-color:rgba(11,230,183,0.5); box-shadow:0 0 12px rgba(11,230,183,0.3); }
+    .connection-badge[data-state="connecting"]{ color:#ffd479; border-color:rgba(255,212,121,0.5); box-shadow:0 0 12px rgba(255,212,121,0.25); }
+    .connection-badge[data-state="error"]{ color:#ff6b6b; border-color:rgba(255,107,107,0.5); box-shadow:0 0 12px rgba(255,107,107,0.25); }
+    audio{ width:100%; margin-top:16px; }
+    .mode-toggle{ margin:16px 0; display:flex; gap:12px; align-items:center; font-size:14px; letter-spacing:0.05em; }
+    .mode-toggle-button{ background:#1f2937; color:#e2e8f0; box-shadow:0 10px 20px rgba(0,0,0,0.35); }
+    .push-controls{ margin-top:12px; }
+    .hold-button{ background:#ff9645; color:#050505; box-shadow:0 0 18px rgba(255,150,69,0.35); }
+    .hold-button.active{ box-shadow:0 0 25px rgba(255,150,69,0.7); }
+    .diag-card{margin-top:18px;padding:18px;border-radius:16px;background:rgba(3,7,18,0.65);border:1px solid rgba(255,255,255,0.08);font-size:14px;line-height:1.6;display:flex;flex-direction:column;gap:14px;}
+    .diag-section{display:flex;flex-direction:column;gap:8px;}
+    .diag-item{display:flex;justify-content:space-between;gap:12px;}
+    .diag-label{color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;font-size:12px;}
+    .pipeline-card{padding:14px;border-radius:14px;background:rgba(6,10,22,0.7);border:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;gap:12px;}
+    .pipeline-header{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+    .pipeline-header h4{margin:0;font-size:12px;letter-spacing:0.12em;color:var(--muted);}
+    .pipeline-current{font-size:15px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
+    .pipeline-live-pill{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;padding:6px 10px;border-radius:999px;border:1px solid rgba(56,248,200,0.4);color:var(--accent);box-shadow:0 0 12px rgba(56,248,200,0.25);}
+    .pipeline-live-pill[data-state="idle"]{color:var(--muted);border-color:rgba(255,255,255,0.2);box-shadow:none;}
+    .pipeline-live-pill[data-state="error"]{color:#ff6b6b;border-color:rgba(255,107,107,0.45);box-shadow:0 0 12px rgba(255,107,107,0.25);}
+    .pipeline-stages{display:flex;flex-direction:column;gap:10px;}
+    .pipeline-stage{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);transition:border 0.2s ease, background 0.2s ease;}
+    .pipeline-stage[data-state="active"]{border-color:rgba(56,248,200,0.5);background:rgba(56,248,200,0.08);}
+    .pipeline-stage[data-state="done"]{border-color:rgba(56,248,200,0.35);background:rgba(14,90,72,0.35);}
+    .pipeline-stage[data-state="error"]{border-color:rgba(255,107,107,0.5);background:rgba(255,107,107,0.08);}
+    .pipeline-index{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;}
+    .pipeline-copy{flex:1;display:flex;flex-direction:column;gap:4px;}
+    .pipeline-title{font-size:14px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;}
+    .pipeline-desc{font-size:12px;color:var(--muted);}
+    .pipeline-stage-status{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);}
+    .pipeline-stage[data-state="active"] .pipeline-stage-status{color:var(--accent);}
+    .pipeline-stage[data-state="done"] .pipeline-stage-status{color:#6cfad7;}
+    .pipeline-stage[data-state="error"] .pipeline-stage-status{color:#ff8a8a;}
+    .pipeline-marker{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;}
+    .pipeline-marker .pulse{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse 1.2s infinite;}
+    .pipeline-marker .check{display:none;font-size:14px;color:#5ff0c7;}
+    .pipeline-stage[data-state="done"] .pipeline-marker .pulse{display:none;}
+    .pipeline-stage[data-state="done"] .pipeline-marker .check{display:block;}
+    .pipeline-stage[data-state="pending"] .pipeline-marker .pulse{opacity:0.3;animation:none;}
+    .pipeline-stage[data-state="error"] .pipeline-marker .pulse{background:#ff6b6b;box-shadow:0 0 12px #ff6b6b;}
+    @keyframes pulse{0%{transform:scale(0.6);opacity:0.85;}70%{transform:scale(1);opacity:0.4;}100%{transform:scale(0.6);opacity:0.85;}}
+    #log{
+      margin-top:16px;
+      height:220px;
+      background:#05070e;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,0.05);
+      padding:16px;
+      font-family:'JetBrains Mono','Fira Code',monospace;
+      font-size:13px;
+      line-height:1.5;
+      overflow:auto;
+      white-space:pre-wrap;
+    }
+    .flow-card{
+      margin-top:24px;
+      padding:18px;
+      border-radius:16px;
+      border:1px dashed rgba(255,255,255,0.12);
+      background:rgba(0,0,0,0.25);
+    }
+    .flow-card h3{ margin:0 0 10px; letter-spacing:0.08em; text-transform:uppercase; font-size:15px; color:var(--muted); }
+    .flow-card ol{ margin:0; padding-left:18px; display:grid; gap:8px; }
+    .flow-card li{ font-size:14px; color:var(--text); line-height:1.5; }
+    .flow-card strong{ color:var(--accent); letter-spacing:0.06em; }
+    .orb-wrapper{ position:relative; min-height:320px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    canvas#waveCanvas{ position:absolute; inset:0; width:100%; height:100%; filter:drop-shadow(0 0 20px rgba(0,0,0,0.8)); }
+    .orb{
+      width:240px;
+      height:240px;
+      border-radius:50%;
+      background:radial-gradient(circle at 30% 30%,rgba(255,255,255,0.9),var(--accent));
+      box-shadow:0 0 40px rgba(56,248,200,0.45), inset 0 0 60px rgba(0,0,0,0.8);
+      transition:transform 0.25s ease, filter 0.25s ease, background 0.25s ease;
+      transform-style:preserve-3d;
+    }
+    body[data-mode="responding"] .orb{ box-shadow:0 0 45px rgba(255,150,69,0.45), inset 0 0 60px rgba(0,0,0,0.8); }
+  </style>
+  <script type="module">
+    import ModeToggle from './components/modeToggle.js';
+    import AudioController from './components/audioController.js';
+
+    const qs = (s) => document.querySelector(s);
+    let logEl;
+    let orbEl;
+    let waveCanvas;
+    let connectBtn;
+    let disconnectBtn;
+    let roomInput;
+    let serverInput;
+    let audioEl;
+    let statusPrimaryEl;
+    let statusSecondaryEl;
+    let connectionBadgeEl;
+    let statusDotEl;
+    let backendBase = '';
+    let micTrack = null;
+    let modeToggle;
+    let audioController;
+    let modeToggleReady = false;
+    let diagInterval;
+    let pipelineStagesEl;
+    let stageStatusEl;
+    let pipelineLivePillEl;
+    const textDecoder = new TextDecoder();
+
+    const sdkSources = [
+      './vendor/livekit-client.min.js',
+      'https://cdn.livekit.io/libs/client-sdk-js/2.3.7/livekit-client.min.js',
+      'https://cdn.jsdelivr.net/npm/livekit-client@2.3.7/dist/livekit-client.min.js',
+      'https://unpkg.com/livekit-client@2.3.7/dist/livekit-client.min.js',
+      'https://ga.jspm.io/npm:livekit-client@2.3.7/dist/livekit-client.umd.js',
+    ];
+
+    const PIPELINE_STEPS = [
+      { id: 'stt', title: 'STT', desc: 'Speech → Text' },
+      { id: 'rag', title: 'RAG', desc: 'Context retrieval' },
+      { id: 'chat', title: 'Chat', desc: 'Reasoning & reply' },
+      { id: 'tts', title: 'TTS', desc: 'Synth audio back' },
+    ];
+    const PIPELINE_ORDER = PIPELINE_STEPS.map((step) => step.id);
+
+    const loadScript = (src) => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src.startsWith('http') ? src : src;
+        script.async = true;
+        if (script.src.startsWith('http')) {
+          script.crossOrigin = 'anonymous';
+        }
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(script);
+      });
+    };
+
+    const ensureLiveKit = async () => {
+      if (window.LivekitClient) {
+        return window.LivekitClient;
+      }
+      if (!window.__livekitReadyPromise) {
+        window.__livekitReadyPromise = (async () => {
+          for (const src of sdkSources) {
+            try {
+              await loadScript(src);
+              if (window.LivekitClient) {
+                return window.LivekitClient;
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }
+          throw new Error('Unable to load LiveKit SDK from CDN');
+        })();
+      }
+      return window.__livekitReadyPromise;
+    };
+
+    let room;
+    let listeningAnalyser;
+    let assistantAnalyser;
+    let audioCtx;
+    let assistantCtx;
+    let animationFrame;
+    let currentMode = 'idle';
+    let assistantSpeaking = false;
+
+    const resizeCanvas = () => {
+      const rect = waveCanvas.getBoundingClientRect();
+      waveCanvas.width = rect.width * window.devicePixelRatio;
+      waveCanvas.height = rect.height * window.devicePixelRatio;
+    };
+
+    const log = (msg) => {
+      const stamp = new Date().toLocaleTimeString();
+      logEl.textContent += `[${stamp}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    const setConnectionState = (state, label) => {
+      if (!connectionBadgeEl) return;
+      connectionBadgeEl.dataset.state = state;
+      connectionBadgeEl.textContent = label;
+    };
+
+    const setMode = (mode) => {
+      currentMode = mode;
+      document.body.dataset.mode = mode;
+      if (statusDotEl) {
+        let color = 'var(--accent)';
+        if (mode === 'responding') color = 'var(--accent-respond)';
+        if (mode === 'error') color = '#ff6b6b';
+        statusDotEl.style.background = color;
+        statusDotEl.style.boxShadow = `0 0 12px ${color}`;
+      }
+    };
+
+    const updateStatus = (primary, secondary, mode) => {
+      if (primary && statusPrimaryEl) statusPrimaryEl.textContent = primary;
+      if (statusSecondaryEl) statusSecondaryEl.textContent = secondary || '';
+      if (mode) setMode(mode);
+    };
+
+    const initAudioContexts = () => {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!assistantCtx) {
+        assistantCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = assistantCtx.createMediaElementSource(audioEl);
+        assistantAnalyser = assistantCtx.createAnalyser();
+        assistantAnalyser.fftSize = 2048;
+        source.connect(assistantAnalyser);
+        assistantAnalyser.connect(assistantCtx.destination);
+      }
+    };
+
+    const setupMicAnalyser = (track) => {
+      const stream = new MediaStream([track.mediaStreamTrack]);
+      const source = audioCtx.createMediaStreamSource(stream);
+      listeningAnalyser = audioCtx.createAnalyser();
+      listeningAnalyser.fftSize = 2048;
+      source.connect(listeningAnalyser);
+    };
+
+    const getLevel = (analyser) => {
+      if (!analyser) return 0;
+      const data = new Uint8Array(analyser.fftSize);
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const val = (data[i] - 128) / 128;
+        sum += val * val;
+      }
+      return Math.min(1, Math.sqrt(sum / data.length));
+    };
+
+    const animate = () => {
+      const ctx = waveCanvas.getContext('2d');
+      const width = waveCanvas.width;
+      const height = waveCanvas.height;
+      const listenLevel = getLevel(listeningAnalyser);
+      const respondLevel = getLevel(assistantAnalyser);
+
+      if (!assistantSpeaking) {
+        if (listenLevel > 0.08 && currentMode !== 'listening') {
+          updateStatus('Speak now 🎙️', 'Jarvis is actively listening.', 'listening');
+        } else if (listenLevel <= 0.08 && currentMode === 'listening') {
+          setMode('idle');
+        } else if (currentMode !== 'responding' && currentMode !== 'listening') {
+          setMode('idle');
+        }
+      }
+
+      const activeLevel = currentMode === 'responding' ? respondLevel : listenLevel;
+      const jitter = 1 + activeLevel * 0.6;
+      orbEl.style.transform = `scale(${jitter}) rotateX(${activeLevel * 12}deg) rotateY(${activeLevel * 18}deg)`;
+      orbEl.style.filter = `drop-shadow(0 0 ${20 + activeLevel * 40}px var(--accent))`;
+
+      ctx.clearRect(0, 0, width, height);
+      const waveCount = 3;
+      for (let i = 0; i < waveCount; i++) {
+        ctx.beginPath();
+        const offset = i * 0.4;
+        ctx.lineWidth = 2;
+        const alpha = 0.5 - i * 0.12;
+        ctx.strokeStyle = currentMode === 'responding'
+          ? `rgba(255,150,69,${alpha})`
+          : `rgba(47,255,157,${alpha})`;
+        for (let x = 0; x < width; x++) {
+          const progress = x / width;
+          const frequency = 2 + i;
+          const amplitude = (height / 6) * (activeLevel + 0.1);
+          const y = height / 2 +
+            Math.sin(progress * frequency * Math.PI * 2 + offset + performance.now() / 800) *
+            amplitude * (1 - progress);
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      animationFrame = requestAnimationFrame(animate);
+    };
+
+    const defaultServerUrl = () => {
+      const { protocol, hostname } = window.location;
+      if (protocol.startsWith('http')) {
+        return `${protocol}//${hostname}:8000`;
+      }
+      return 'http://localhost:8000';
+    };
+
+    const handleError = (err, hint) => {
+      console.error(err);
+      const message = err && err.message ? err.message : String(err);
+      log(`❌ ${hint ? `${hint}: ` : ""}${message}`);
+      setConnectionState("error", "ERROR");
+      updateStatus("Connection failed", hint || message, "error");
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      if (diagInterval) {
+        clearInterval(diagInterval);
+        diagInterval = null;
+      }
+    };
+
+    const logClientEvent = async (action, details = {}) => {
+      if (!backendBase) return;
+      try {
+        await fetch(`${backendBase}/client-log`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, details }),
+        });
+      } catch (error) {
+        console.warn('client-log failed', error);
+      }
+    };
+
+    const setMicEnabled = async (enabled, reason = 'auto') => {
+      if (!micTrack) return;
+      try {
+        if (enabled) {
+          micTrack.unmute?.();
+        } else {
+          micTrack.mute?.();
+        }
+        logClientEvent('mic-state', { enabled, reason });
+      } catch (error) {
+        console.warn('mic toggle failed', error);
+      }
+    };
+
+    const buildPipelineStages = () => {
+      if (!pipelineStagesEl) return;
+      pipelineStagesEl.innerHTML = '';
+      PIPELINE_STEPS.forEach((step, idx) => {
+        const row = document.createElement('div');
+        row.className = 'pipeline-stage';
+        row.dataset.stage = step.id;
+        row.dataset.state = 'pending';
+        row.innerHTML = `
+          <div class="pipeline-index">${String(idx + 1).padStart(2, '0')}</div>
+          <div class="pipeline-copy">
+            <div class="pipeline-title">${step.title}</div>
+            <div class="pipeline-desc">${step.desc}</div>
+            <div class="pipeline-stage-status">Waiting</div>
+          </div>
+          <div class="pipeline-marker">
+            <span class="pulse"></span>
+            <span class="check">✓</span>
+          </div>
+        `;
+        pipelineStagesEl.appendChild(row);
+      });
+    };
+
+    const computeStageState = (currentStage, stepId) => {
+      const normalized = (currentStage || 'idle').toLowerCase();
+      if (normalized === 'error') return 'error';
+      if (normalized === 'idle') return 'pending';
+      const currentIdx = PIPELINE_ORDER.indexOf(normalized);
+      const targetIdx = PIPELINE_ORDER.indexOf(stepId);
+      if (currentIdx === -1 || targetIdx === -1) return 'pending';
+      if (targetIdx < currentIdx) return 'done';
+      if (targetIdx === currentIdx) return 'active';
+      return 'pending';
+    };
+
+    const renderPipelineStages = (currentStage) => {
+      if (!pipelineStagesEl) return;
+      const normalized = (currentStage || 'idle').toLowerCase();
+      if (stageStatusEl) {
+        stageStatusEl.textContent = formatStage(normalized);
+      }
+      if (pipelineLivePillEl) {
+        let pillState = 'idle';
+        if (normalized === 'error') pillState = 'error';
+        else if (normalized !== 'idle') pillState = 'live';
+        pipelineLivePillEl.dataset.state = pillState;
+        pipelineLivePillEl.textContent = pillState === 'live' ? 'LIVE' : pillState.toUpperCase();
+      }
+      pipelineStagesEl.querySelectorAll('.pipeline-stage').forEach((row) => {
+        const state = computeStageState(normalized, row.dataset.stage);
+        row.dataset.state = state;
+        const statusEl = row.querySelector('.pipeline-stage-status');
+        if (statusEl) {
+          if (state === 'done') statusEl.textContent = 'Complete';
+          else if (state === 'active') statusEl.textContent = 'In progress';
+          else if (state === 'error') statusEl.textContent = 'Check server';
+          else statusEl.textContent = 'Waiting';
+        }
+      });
+    };
+
+    const renderDiagnostics = (data) => {
+      const livekitEl = qs('#diagLivekit');
+      const transcriptEl = qs('#diagTranscript');
+      const replyEl = qs('#diagReply');
+      const ttsEl = qs('#diagTTS');
+      if (!data || !data.status) {
+        livekitEl.textContent = 'Disconnected';
+        renderPipelineStages('idle');
+        transcriptEl.textContent = '—';
+        replyEl.textContent = '—';
+        ttsEl.textContent = '—';
+        return;
+      }
+      livekitEl.textContent = data.status.connected ? 'Connected' : 'Disconnected';
+      renderPipelineStages(data.status.stage);
+      transcriptEl.textContent = data.status.last_transcript ? data.status.last_transcript : '–';
+      replyEl.textContent = data.status.last_reply_chars ? `${data.status.last_reply_chars} chars` : '–';
+      ttsEl.textContent = data.status.last_tts_bytes ? `${data.status.last_tts_bytes} bytes` : '–';
+    };
+
+    const startDiagnosticsPoll = () => {
+      if (!backendBase || diagInterval) return;
+      const fetchDiag = async () => {
+        try {
+          const res = await fetch(`${backendBase}/diagnostics`);
+          if (res.ok) {
+            const data = await res.json();
+            renderDiagnostics(data);
+          }
+        } catch (err) {
+          console.warn('diagnostics poll failed', err);
+        }
+      };
+      fetchDiag();
+      diagInterval = setInterval(fetchDiag, 4000);
+    };
+
+    const formatStage = (stage) => {
+      switch ((stage || 'idle').toLowerCase()) {
+        case 'stt':
+          return 'STT (transcribing)';
+        case 'rag':
+          return 'Retrieving context';
+        case 'chat':
+          return 'Chatting';
+        case 'tts':
+          return 'Synthesizing voice';
+        case 'error':
+          return 'Error';
+        case 'idle':
+        default:
+          return 'Idle';
+      }
+    };
+
+    const handleModeChange = (mode) => {
+      if (audioController) {
+        audioController.setMode(mode);
+      }
+      if (mode === 'conversation') {
+        setMicEnabled(true, 'mode-conversation');
+      } else {
+        setMicEnabled(false, 'mode-push');
+      }
+    };
+
+    const connect = async () => {
+      try {
+        initAudioContexts();
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = true;
+        setConnectionState('connecting', 'LINKING…');
+        updateStatus('Connecting…', 'Requesting LiveKit token.', 'idle');
+
+        const identity = `web-${Math.random().toString(36).slice(2, 8)}`;
+        const roomName = roomInput.value.trim() || 'demo-room';
+        const serverUrl = serverInput.value.trim() || defaultServerUrl();
+        backendBase = serverUrl;
+
+        log(`Requesting token from ${serverUrl} for room ${roomName}...`);
+        let token;
+        let livekitUrl;
+        try {
+          const res = await fetch(`${serverUrl}/token?identity=${encodeURIComponent(identity)}&room=${encodeURIComponent(roomName)}`);
+          if (!res.ok) {
+            throw new Error(`Token request failed (${res.status})`);
+          }
+          const data = await res.json();
+          token = data.token;
+          livekitUrl = data.livekit_url;
+        } catch (tokenErr) {
+          return handleError(tokenErr, "Token fetch failed");
+        }
+        if (!livekitUrl) {
+          return handleError(new Error("No livekit_url in token response"), "Invalid token response");
+        }
+
+        const LKLib = await ensureLiveKit();
+        updateStatus('Linking LiveKit…', `Connecting to ${livekitUrl}`, 'idle');
+        room = new LKLib.Room();
+        try {
+          await room.connect(livekitUrl, token);
+        } catch (roomErr) {
+          return handleError(roomErr, "LiveKit connection failed");
+        }
+        setConnectionState('connected', 'ONLINE');
+        log(`✅ Connected as ${identity}`);
+        logClientEvent('connect-success', { identity, roomName });
+
+        updateStatus('Publishing mic…', 'Allow microphone access if prompted.', 'idle');
+        let track;
+        try {
+          const LKLib = await ensureLiveKit();
+          track = await LKLib.createLocalAudioTrack();
+        } catch (micErr) {
+          return handleError(micErr, "Mic capture failed (check browser permissions)");
+        }
+        try {
+          await room.localParticipant.publishTrack(track);
+        } catch (pubErr) {
+          return handleError(pubErr, "Publishing mic track failed");
+        }
+        micTrack = track;
+        setMicEnabled(true, 'auto');
+        setupMicAnalyser(track);
+        await audioCtx.resume();
+        animate();
+        assistantSpeaking = false;
+        updateStatus('Speak now 🎙️', 'Jarvis is ready for your prompt.', 'listening');
+        log('🎙️ Mic published');
+
+        if (modeToggle) {
+          if (!modeToggleReady) {
+            await modeToggle.init();
+            modeToggleReady = true;
+          } else {
+            await modeToggle.refresh();
+          }
+        }
+        startDiagnosticsPoll();
+
+        room.on(LKLib.RoomEvent.DataReceived, async (payload, participant, kind, topic) => {
+          if (!topic) return;
+          const bytes = payload ? (payload.length || payload.byteLength || 0) : 0;
+          logClientEvent('data-received', { topic, bytes });
+          if (topic === 'assistant-text') {
+            const text = textDecoder.decode(payload);
+            if (text.trim().startsWith('[user]')) {
+              updateStatus('Processing…', 'Hold tight while Jarvis reasons.', 'idle');
+            } else {
+              updateStatus('Answer streaming', 'Jarvis is responding.', 'responding');
+            }
+            log(`🤖 Assistant text: ${text}`);
+            return;
+          }
+
+          if (topic === 'assistant-tts.wav') {
+            assistantSpeaking = true;
+            updateStatus('Answer streaming', 'Jarvis is speaking back to you.', 'responding');
+            setMode('responding');
+            if (assistantCtx && assistantCtx.state === 'suspended') {
+              await assistantCtx.resume();
+            }
+            const blob = new Blob([payload], { type: 'audio/wav' });
+            audioEl.src = URL.createObjectURL(blob);
+            await audioEl.play();
+            log('🔊 Playing Sarvam TTS');
+          }
+        });
+
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+      } catch (err) {
+        handleError(err, "Unexpected error");
+      }
+    };
+
+    const disconnect = async () => {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      listeningAnalyser = undefined;
+      assistantSpeaking = false;
+      if (room) {
+        await room.disconnect();
+        room = undefined;
+      }
+      setConnectionState('idle', 'OFFLINE');
+      updateStatus('Idle', 'Click connect to wake Jarvis.', 'idle');
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      backendBase = '';
+      micTrack = null;
+      modeToggleReady = false;
+      if (diagInterval) {
+        clearInterval(diagInterval);
+        diagInterval = null;
+      }
+      renderDiagnostics(null);
+      if (audioController) audioController.setMode('conversation');
+      logClientEvent('disconnect', {});
+      log('⬇️ Disconnected');
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      logEl = qs('#log');
+      orbEl = qs('#orb');
+      waveCanvas = qs('#waveCanvas');
+      connectBtn = qs('#connect');
+      disconnectBtn = qs('#disconnect');
+      roomInput = qs('#room');
+      serverInput = qs('#server');
+      audioEl = qs('#assistantAudio');
+      statusPrimaryEl = qs('#statusPrimary');
+      statusSecondaryEl = qs('#statusSecondary');
+      connectionBadgeEl = qs('#connectionBadge');
+      statusDotEl = qs('#statusDot');
+      pipelineStagesEl = qs('#pipelineStages');
+      stageStatusEl = qs('#diagStageStatus');
+      pipelineLivePillEl = qs('#pipelineLivePill');
+      buildPipelineStages();
+      renderPipelineStages('idle');
+      serverInput.value = defaultServerUrl();
+      const modeToggleRoot = qs('#modeToggle');
+      const pushControlsRoot = qs('#pushControls');
+      audioController = new AudioController({
+        root: pushControlsRoot,
+        onHoldStart: () => setMicEnabled(true, 'hold-start'),
+        onHoldEnd: () => setMicEnabled(false, 'hold-end'),
+      });
+      modeToggle = new ModeToggle({
+        root: modeToggleRoot,
+        getServerUrl: () => backendBase,
+        onModeChange: handleModeChange,
+        log: (action, details) => logClientEvent(action, details),
+      });
+
+      audioEl.addEventListener('ended', () => {
+        assistantSpeaking = false;
+        updateStatus('Speak now 🎙️', 'Ask your next question.', 'idle');
+      });
+      audioEl.addEventListener('pause', () => {
+        if (!assistantSpeaking && currentMode !== 'listening') {
+          updateStatus('Idle', 'Jarvis is waiting for you.', 'idle');
+        }
+      });
+      audioEl.addEventListener('playing', () => {
+        assistantSpeaking = true;
+        updateStatus('Answer streaming', 'Jarvis is responding.', 'responding');
+      });
+
+      if (connectBtn) connectBtn.addEventListener('click', connect);
+      if (disconnectBtn) disconnectBtn.addEventListener('click', disconnect);
+      updateStatus('Idle', 'Click connect to wake Jarvis.', 'idle');
+      setConnectionState('idle', 'OFFLINE');
+    });
+  </script>
+</head>
+<body data-mode="idle">
+  <div class="jarvis-banner">
+    <span>JARVIS</span>
+    <small>NEURAL RETRIEVAL CORE</small>
+  </div>
+  <div class="glass-shell">
+    <section class="panel">
+      <div class="tag-row">
+        <span class="tag">LiveKit</span>
+        <span class="tag">Sarvam</span>
+        <span class="tag">RAG</span>
+        <span class="tag">Realtime</span>
+      </div>
+      <h1>Atomic Voice Core</h1>
+      <p class="subtitle">End-of-speech Retrieval · Neon Control Room</p>
+
+      <div class="inputs">
+        <div style="flex:1 1 220px">
+          <label for="server">Token server URL</label>
+          <input id="server" placeholder="http://localhost:8000">
+        </div>
+        <div style="flex:1 1 200px">
+          <label for="room">Room ID</label>
+          <input id="room" placeholder="demo-room" value="demo-room">
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap">
+        <button id="connect" type="button">Connect & Publish</button>
+        <button id="disconnect" type="button" disabled style="background:#1c1f2f; color:var(--muted); box-shadow:none">Disconnect</button>
+      </div>
+      <div class="mode-toggle" id="modeToggle"></div>
+      <div class="push-controls" id="pushControls"></div>
+
+      <div class="jarvis-status">
+        <div id="statusDot" class="status-dot"></div>
+        <div>
+          <div id="statusPrimary" class="status-primary">Idle</div>
+          <div id="statusSecondary" class="status-secondary">Click connect to wake Jarvis.</div>
+        </div>
+        <div id="connectionBadge" class="connection-badge" data-state="idle">OFFLINE</div>
+      </div>
+      <div class="diag-card" id="diagCard">
+        <div class="diag-section">
+          <div class="diag-item"><span class="diag-label">LiveKit</span><span id="diagLivekit">–</span></div>
+          <div class="diag-item"><span class="diag-label">Last Transcript</span><span id="diagTranscript">–</span></div>
+        </div>
+        <div class="pipeline-card">
+          <div class="pipeline-header">
+            <div>
+              <h4>Pipeline Stage</h4>
+              <div id="diagStageStatus" class="pipeline-current">Idle</div>
+            </div>
+            <span id="pipelineLivePill" class="pipeline-live-pill" data-state="idle">IDLE</span>
+          </div>
+          <div class="pipeline-stages" id="pipelineStages"></div>
+        </div>
+        <div class="diag-section">
+          <div class="diag-item"><span class="diag-label">Sarvam Reply</span><span id="diagReply">–</span></div>
+          <div class="diag-item"><span class="diag-label">TTS Bytes</span><span id="diagTTS">–</span></div>
+        </div>
+      </div>
+
+      <audio id="assistantAudio" controls></audio>
+      <div id="log" aria-live="polite"></div>
+
+      <div class="flow-card">
+        <h3>Interaction Flow</h3>
+        <ol>
+          <li><strong>Connect</strong> – set the token server + room, click <em>Connect & Publish</em>, allow the mic.</li>
+          <li><strong>Speak</strong> – when the orb glows neon green and the banner says “Speak now 🎙️”, ask your question.</li>
+          <li><strong>Wait</strong> – the status switches to “Processing…”, meaning Jarvis is running Sarvam STT → RAG → LLM.</li>
+          <li><strong>Listen</strong> – the orb turns orange while Sarvam TTS streams back the answer. Let it finish.</li>
+          <li><strong>Follow up</strong> – once the status returns to “Speak now 🎙️”, ask the next thing without reconnecting.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="panel orb-wrapper">
+      <canvas id="waveCanvas"></canvas>
+      <div id="orb" class="orb"></div>
+    </section>
+  </div>
+</body>
+</html>
